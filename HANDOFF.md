@@ -118,7 +118,21 @@ android 仓库当前 **12 个提交** → `20012`。
 
 Flavor 与包名：`xiaomi` / `oppo` / `vivo` / `samsung` / `honor`，小米包名 `com.baidu.carlife.xiaomi`。**APK 必须与手机上已装的同 Flavor 一致**，否则签名/覆盖会出问题。
 
-**CI**：`.github/workflows/android.yml` 会在 push main / PR / 手动触发时并行跑各 flavor 并出包。但 **fork 仓库的 Actions 默认是关闭的**（`total_count=0`），要用得去 fork 的 Actions 页手动 Enable，或本地 `workflow_dispatch`。当前没有任何一次 CI 运行记录。
+**CI（`.github/workflows/android.yml`）——结论：本项目不需要，保持关闭。**
+
+它做三件事：`protocol-tests` 只跑 JVM 测试不产包；`apk` 是 5 个品牌并行矩阵，出 **release** 包（`isMinifyEnabled=true`）、`apksigner verify --print-certs`、`aapt dump badging` 回读真实版本号，artifact 存 90 天；`publish`（仅 push main / 手动）下载 5 个 APK → 打 `CarVex_all_flavors_release_<ver>.zip` → `SHA256SUMS` → 建 `build-<run>` 预发布 release。
+
+不开的理由：
+
+1. 它解决"多品牌发版 + 回归验证"，我们解决"单台车机的连通性调试"，零交集。
+2. 产物是 release（R8 混淆），出问题时栈不可读；排查 SAP 要的是 debug 包 + 完整日志。
+3. 每次 push main 都会建一个预发布 release 和 tag，调试期频繁推送会把 fork 堆满噪音。
+4. 5 个品牌 = 5 个 job 冷启动（SDK + Gradle 缓存），本地增量构建只要几十秒。
+5. artifact 要先登录网页下载再 adb，链路比本地长。
+
+**唯一值得开的场景**：换到一台不想装 JDK/SDK 的电脑。做法：fork 的 Actions → Enable → 把 matrix 临时只留 `xiaomi`、构建任务改成 `assembleXiaomiDebug`（默认只出 release）→ 跑完从 artifacts 取包。做完记得改回来。
+
+> 另外：这个 workflow 的版本组合（temurin 17 / `platforms;android-37.0` / `build-tools;36.0.0`）就是 §1.2 的出处，价值已经吸收进文档，不需要为了看它而启用 CI。
 
 
 ### 1.3 firmware 子模块（只有目录树，没有文件内容）
