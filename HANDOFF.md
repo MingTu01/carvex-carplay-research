@@ -17,7 +17,7 @@
 | **代码子模块（fork）** | https://github.com/MingTu01/carvex-android （`android/`） |
 | **固件证据库（fork）** | https://github.com/MingTu01/carvex-ios-firmware （`firmware/`，**几十 GB，只用 blobless 克隆**） |
 | 上游原始仓库 | https://github.com/iamr0s/carvex-carplay-research · https://github.com/iamr0s/carvex-android · https://github.com/iamr0s/carvex-ios-firmware |
-| 本机工作区 | `C:\Users\Administrator\WorkBuddy\carvex` |
+| 当前工作副本 | `C:\Users\Administrator\WorkBuddy\carvex`（可换任意路径，文档不依赖它） |
 | 当前 HEAD | 父仓库 `main`；`android` 子模块 `main` @ `21765d7`（4 个本地提交，已推送） |
 | 构建状态 | ✅ 能出包，`:app:assembleXiaomiDebug` 成功 |
 | 测试状态 | ✅ `:protocol-carplay:testDebugUnitTest`、`:host-carlife-mixing:test` 全绿 |
@@ -25,7 +25,7 @@
 
 **一句话结论**：真车原先在"安全选路"这一步被代码按设计判死（`SECURITY_POLICY_UNRESOLVED`）。现在这一层改成了回落到 MFi/SAP 认证，逻辑通顺、能编译、能测试，**但一次都没有在真车上跑过**。真车能不能出画面，取决于车机是否提供 `/auth-setup` 端点——这是当前唯一的未知大关。
 
-**下一个 Agent 的第一件事**：把 `android/app/build/outputs/apk/xiaomi/debug/CarVex_xiaomi_debug_20001.apk` 装到手机，连真车 `mingtu`，抓日志，按 §6.2 的判据看四行。**在拿到真机日志之前，不要改任何协议代码。**
+**下一个 Agent 的第一件事**：装包（现成产物 `android/app/build/outputs/apk/xiaomi/debug/CarVex_xiaomi_debug_20001.apk`；重新构建会变成 `…_20012.apk`，见 §1.2 版本号规则），连真车 `mingtu`，抓日志，按 §6.2 的判据看四行。**在拿到真机日志之前，不要改任何协议代码。**
 
 ---
 
@@ -60,25 +60,66 @@ git submodule update --init --depth 1 android   # .gitmodules 已指向 MingTu01
 每个仓库都保留 `upstream` 指向 `iamr0s`，用于对比上游更新：`git fetch upstream && git log --oneline HEAD..upstream/main`。
 **本文档里所有 `文件:行号` 都以 fork 的 `android` main @ `21765d7` 为准**；如果上游之后有改动，行号可能偏移，用函数名或日志字符串 grep 定位更稳。
 
-### 1.2 构建环境（已装好，路径写死，别重装）
+### 1.2 构建环境（换机器必读，不绑定某台电脑）
 
-| 组件 | 路径 | 说明 |
+**前置只有三件套**，都在仓库外，换机要自己装：
+
+| 依赖 | 要求 | 备注 |
 |---|---|---|
-| Android SDK | `C:\Users\Administrator\AppData\Local\Android\Sdk` | cmdline-tools latest + `platforms;android-37.0` + `build-tools;37.0.0`/`36.0.0` |
-| JDK 17 | `C:\Java\jdk-17` | **Gradle toolchain 硬要求 17**，本机默认 JDK 25 会直接失败 |
-| SDK 路径配置 | `android/local.properties` | `sdk.dir=C\:\\Users\\Administrator\\AppData\\Local\\Android\\Sdk` |
+| JDK | **必须 17** | Gradle toolchain 硬要求；21/25 会报 `Cannot find a Java installation … languageVersion=17`。装了多版本时用 `JAVA_HOME` 临时指定，不要改全局 |
+| Android SDK | `platforms;android-37.0` + `build-tools;36.0.0`（或 37.0.0）+ `platform-tools` | 包名**必须带 `.0`**：`platforms;android-37` 不存在，`sdkmanager` 会直接说不支持 |
+| Gradle | 不需要装 | 仓库自带 Wrapper，`gradlew.bat` 会自己下 |
 
-构建命令（**必须带 `JAVA_HOME`**）：
+**签名不用配**：`.signing/keystore.properties` 和 `.signing/release.jks` 都已被仓库跟踪（上游 `40a3b0d` 起 CI 也用它）。所以 debug / release 都能直接签名，新机器**不需要**准备 keystore，也不要覆盖这两个文件。
+
+**一次性安装（Windows + cmdline-tools）**：
 
 ```bash
-cd /c/Users/Administrator/WorkBuddy/carvex/android
-JAVA_HOME="C:/Java/jdk-17" ./gradlew.bat :protocol-carplay:testDebugUnitTest :host-carlife-mixing:test --no-daemon --console=plain
-JAVA_HOME="C:/Java/jdk-17" ./gradlew.bat :app:assembleXiaomiDebug --no-daemon --console=plain
+# 1) 下载 commandlinetools-win-*_latest.zip，解压成 <SDK>/cmdline-tools/latest
+# 2) 接受许可并装包
+<SDK>/cmdline-tools/latest/bin/sdkmanager.bat --sdk_root=<SDK> --licenses
+<SDK>/cmdline-tools/latest/bin/sdkmanager.bat --sdk_root=<SDK> \
+  "platform-tools" "platforms;android-37.0" "build-tools;36.0.0"
+# 3) 在 android/ 下写 local.properties（不要提交）
+#    sdk.dir=<SDK 绝对路径>，Windows 盘符冒号要转义：sdk.dir=C\:\\path\\to\\Sdk
 ```
 
-产物：`android/app/build/outputs/apk/xiaomi/debug/CarVex_xiaomi_debug_20001.apk`（约 75 MB）
+**构建**（bash / Git Bash）：
 
-Flavor 与包名：`xiaomi` / `oppo` / `vivo` / `samsung` / `honor`，小米包名 `com.baidu.carlife.xiaomi`。**APK 必须与手机上安装的同 Flavor 对齐**，否则签名/覆盖会出问题。
+```bash
+cd android
+export JAVA_HOME="<JDK17 绝对路径>"          # 例：C:/Java/jdk-17
+./gradlew.bat :protocol-carplay:testDebugUnitTest :host-carlife-mixing:test --no-daemon --console=plain
+./gradlew.bat :app:assembleXiaomiDebug --no-daemon --console=plain
+```
+
+**构建**（PowerShell）：
+
+```powershell
+$env:JAVA_HOME="C:\path\to\jdk-17"
+.\gradlew.bat :app:assembleXiaomiDebug --no-daemon
+```
+
+**自检**：`./gradlew.bat -version` 的 JVM 必须是 `17.x`；再跑一次上面的两个任务，都绿才算环境就绪。
+
+**正确的任务名**（上游已修正，别再用旧写法）：
+
+| 用途 | 任务 | 说明 |
+|---|---|---|
+| 协议/宿主单测 | `:protocol-carplay:testDebugUnitTest`、`:host-carlife-mixing:test` | 与品牌无关，最快 |
+| 全量单测 | `:app:testXiaomiDebugUnitTest` 等 | **每个 flavor 一个**，没有聚合任务 |
+| lint | `:app:lintXiaomiRelease` 等 | **没有聚合的 `lintRelease`**，写了会在任务选择阶段报 ambiguous、什么都没跑 |
+| 打包 | `:app:assembleXiaomiDebug` / `:app:assembleRelease` | 产物在 `app/build/outputs/apk/<brand>/<type>/` |
+
+**产物命名与版本号**：`CarVex_<brand>_<buildType>_<versionName>.apk`，
+`versionCode = 20000 + git rev-list --count HEAD`。
+android 仓库当前 **12 个提交** → `20012`。
+**浅克隆会让这个号变小**（`--depth 1` 时是 `20001`），看到版本号奇怪先查克隆深度，不要以为是构建坏了。
+
+Flavor 与包名：`xiaomi` / `oppo` / `vivo` / `samsung` / `honor`，小米包名 `com.baidu.carlife.xiaomi`。**APK 必须与手机上已装的同 Flavor 一致**，否则签名/覆盖会出问题。
+
+**CI**：`.github/workflows/android.yml` 会在 push main / PR / 手动触发时并行跑各 flavor 并出包。但 **fork 仓库的 Actions 默认是关闭的**（`total_count=0`），要用得去 fork 的 Actions 页手动 Enable，或本地 `workflow_dispatch`。当前没有任何一次 CI 运行记录。
+
 
 ### 1.3 firmware 子模块（只有目录树，没有文件内容）
 
@@ -94,6 +135,22 @@ git show HEAD:analysis/vertical-feasibility/linux-first/dependencies.json   # �
 > **不要把 firmware 指针提交进去**（`git add firmware`），那会改掉研究结论所依据的固件版本。
 
 ⚠️ 因为不是正规 submodule init，父仓库 `git status` 可能把 `firmware` 显示成 modified，**属正常，别去"修"它**。
+
+### 1.4 上游那 6 个提交改了什么，有没有用
+
+本地代码曾停在 `eb9f997`（2026-10-31），上游之后又推了 6 个提交，fork 对齐后已包含它们。全部**不涉及协议、认证、音频**，对"真机能不能连上"零影响；其中有两条对换电脑开发有用。
+
+| 提交 | 改了什么 | 对我们 |
+|---|---|---|
+| `40a3b0d` Use tracked signing material in CI | CI 改用仓库里已跟踪的 `.signing/`，删掉 60 行"从 secrets 还原 keystore"的逻辑；README 同步 | **有用**：签名材料本来就在仓库里，换机不用额外配，这也是为什么 `assembleXiaomiDebug` 开箱能出可安装包 |
+| `34bf85c` Fix CI: artifacts dir + step summary | 先建 artifacts 目录再 `tee`；Gradle 失败写进 job summary | 仅 CI 相关 |
+| `e3a3480` Fix CI task selection | lint 是 per-flavor（`lintXiaomiRelease`），没有聚合 `lintRelease`；`bash -e` 下保留失败处理。同步更正了 `AGENT.md` 的任务清单 | **有用**：照旧写法跑 lint 会在任务选择阶段直接报 ambiguous，见 §1.2 任务表 |
+| `90fae45` CI matrix | 各品牌改成并行 job，产出各品牌 APK + `CarVex_all_flavors.zip` | 仅 CI 相关（耗时从串行压到并行） |
+| `9434dcb` Fix matrix | GitHub matrix 的 key 大小写不敏感，品牌首字母大写改为 shell 推导 | 修上一条的 bug |
+| `69802bf` README | 加开发者 QQ 群 | 无技术影响 |
+
+> 上游 `AGENT.md` 是项目自己的开发约定（构建、任务名、协议限制），**改代码前值得先读一遍**，它比本文档更贴近上游的编码规范。
+
 
 ---
 
@@ -331,7 +388,7 @@ Experimental HAP gate=<原因> pi=<长度> pk=<字节数> bonjour=<ip:port> iap2
 
 1. 装包：
    ```
-   adb install -r android/app/build/outputs/apk/xiaomi/debug/CarVex_xiaomi_debug_20001.apk
+   adb install -r android/app/build/outputs/apk/xiaomi/debug/CarVex_xiaomi_debug_*.apk
    ```
    （包名 `com.baidu.carlife.xiaomi`，Flavor 必须与手机已装的一致）
 2. **App 内设置 → 打开"实验认证模式"**。不打开的话 `SessionController.kt:70` 会直接拒绝：
@@ -380,9 +437,10 @@ Experimental HAP gate=pk_missing pi=absent pk=absent bonjour=fe80::…:7000 iap2
 ### 6.5 每次改完的固定动作
 
 ```bash
-cd /c/Users/Administrator/WorkBuddy/carvex/android
-JAVA_HOME="C:/Java/jdk-17" ./gradlew.bat :protocol-carplay:testDebugUnitTest :host-carlife-mixing:test --no-daemon --console=plain
-JAVA_HOME="C:/Java/jdk-17" ./gradlew.bat :app:assembleXiaomiDebug --no-daemon --console=plain
+cd android
+export JAVA_HOME="<JDK17 绝对路径>"
+./gradlew.bat :protocol-carplay:testDebugUnitTest :host-carlife-mixing:test --no-daemon --console=plain
+./gradlew.bat :app:assembleXiaomiDebug --no-daemon --console=plain
 ```
 
 两个都必须绿。协议栈有 1000+ 用例，`SecurityRouting` 相关改动很容易踩到既有断言。
@@ -400,7 +458,7 @@ JAVA_HOME="C:/Java/jdk-17" ./gradlew.bat :app:assembleXiaomiDebug --no-daemon --
 | 5 | **不要全量 clone `firmware/`** | 几十 GB；用 `--filter=blob:none` + `git show` 按需取 |
 | 6 | **不要动 `AndroidManifest.xml` 里 `ShizukuProvider` 的 `exported`** | 必须 `true`，否则 Shizuku 权限永远拿不到（我在加 FileProvider 时误改成 false 过，已改回） |
 | 7 | **不要删 `.workbuddy/`** | 是项目记忆，不是缓存 |
-| 8 | **构建必须 `JAVA_HOME=C:/Java/jdk-17`** | toolchain 硬要求 17，本机默认 25 |
+| 8 | **构建必须用 JDK 17**（`JAVA_HOME` 指过去） | toolchain 硬要求 17；装了 21/25 又不指定会直接失败 |
 | 9 | **SDK 包名是 `platforms;android-37.0`** | `platforms;android-37` 不存在，会装不上 |
 | 10 | **不要用 javadoc 式的"大概"下结论** | 这个项目里的结论全部要落到 `文件:行号` 或日志原文，否则下一个 Agent 会重复踩 |
 | 11 | **不要 `git push upstream`** | `upstream`（`iamr0s`）只读，没有写权限；所有改动推到 `origin`（`MingTu01`） |
@@ -450,9 +508,10 @@ JAVA_HOME="C:/Java/jdk-17" ./gradlew.bat :app:assembleXiaomiDebug --no-daemon --
 
 接手后按顺序确认，全部打勾才算接稳：
 
+- [ ] JDK 是 **17**（`./gradlew.bat -version` 确认），SDK 有 `platforms;android-37.0`，`local.properties` 已写
 - [ ] `cd android && git log --oneline -4` 能看到 4 个提交，且 `git status` 干净
 - [ ] `git remote -v` 里 `origin` 指向 `MingTu01`、`upstream` 指向 `iamr0s`
-- [ ] 构建能出包（§1.2），产物 75 MB 左右
+- [ ] 构建能出包（§1.2），产物 75 MB 左右，版本号 = 20000 + 提交数
 - [ ] 两个测试任务全绿
 - [ ] 读过 §3（真机失败五步链）与 §5 的 U-1/U-2/U-3
 - [ ] 理解"真车必然走 SAP、音频必定哑"这两个结论
