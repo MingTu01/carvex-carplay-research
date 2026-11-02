@@ -9,6 +9,23 @@
 
 ---
 
+## 开工前必读（硬性）
+
+**先读 `AGENT.md`，并遵守它。** 本文档不是规范，只是"当前状态 + 下一步"。
+
+| 文件 | 内容 | 何时 |
+|---|---|---|
+| `AGENT.md`（仓库根） | 强制：阅读顺序、证据等级、修改协议代码的规则、调试流程、实车测试流程 | **动任何代码之前** |
+| `android/AGENT.md` | Android 侧的构建/任务清单、flavor 约定、协议实现限制 | 改 Android 代码之前 |
+
+`AGENT.md` 的原文要求：「任何协议实现、排障或代码修改都必须先阅读本文件」，
+并明确了阅读顺序——**先读规范与 docset，不要先看现有 Android 实现**（它只是候选实现，不是证据）。
+
+**本文档与 `AGENT.md` 冲突时，以 `AGENT.md` 为准。** 下面出现的技术判断只描述"改动做到了哪一步"，
+不构成对规范的解释。
+
+---
+
 ## 0. 一分钟摘要
 
 | 项目 | 状态 |
@@ -25,7 +42,8 @@
 
 **一句话结论**：真车原先在"安全选路"这一步被代码按设计判死（`SECURITY_POLICY_UNRESOLVED`）。现在这一层改成了回落到 MFi/SAP 认证，逻辑通顺、能编译、能测试，**但一次都没有在真车上跑过**。真车能不能出画面，取决于车机是否提供 `/auth-setup` 端点——这是当前唯一的未知大关。
 
-**下一个 Agent 的第一件事**：装包（现成产物 `android/app/build/outputs/apk/xiaomi/debug/CarVex_xiaomi_debug_20001.apk`；重新构建会变成 `…_20012.apk`，见 §1.2 版本号规则），连真车 `mingtu`，抓日志，按 §6.2 的判据看四行。**在拿到真机日志之前，不要改任何协议代码。**
+**下一个 Agent 的第一个动作**：读 `AGENT.md`（见上「开工前必读」）。
+**第一件实验**：装包（现成产物 `android/app/build/outputs/apk/xiaomi/debug/CarVex_xiaomi_debug_20001.apk`；重新构建会变成 `…_20012.apk`，见 §1.2 版本号规则），连真车 `mingtu`，抓日志，按 §6.2 的判据看四行。**在拿到真机日志之前，不要改任何协议代码。**
 
 ---
 
@@ -102,7 +120,7 @@ $env:JAVA_HOME="C:\path\to\jdk-17"
 
 **自检**：`./gradlew.bat -version` 的 JVM 必须是 `17.x`；再跑一次上面的两个任务，都绿才算环境就绪。
 
-**任务名（来自上游 `AGENT.md` §6，已核对，别用旧写法）**：
+**常用任务名（摘录，权威版本见 `android/AGENT.md` §6）**：
 
 | 层级 | 命令 | 何时跑 |
 |---|---|---|
@@ -180,7 +198,7 @@ git show HEAD:analysis/vertical-feasibility/linux-first/dependencies.json   # �
 | `9434dcb` Fix matrix | GitHub matrix 的 key 大小写不敏感，品牌首字母大写改为 shell 推导 | 修上一条的 bug |
 | `69802bf` README | 加开发者 QQ 群 | 无技术影响 |
 
-> 上游 `AGENT.md` 是项目自己的开发约定（构建、任务名、协议限制），**改代码前值得先读一遍**，它比本文档更贴近上游的编码规范。
+> `AGENT.md` 是**强制性**的（见开头「开工前必读」），不是"值得一读"。本文档只描述状态与下一步。
 
 
 ---
@@ -543,6 +561,7 @@ export JAVA_HOME="<JDK17 绝对路径>"
 
 接手后按顺序确认，全部打勾才算接稳：
 
+- [ ] 已读根目录 `AGENT.md` 与 `android/AGENT.md`，并按其阅读顺序执行（先规范与 docset，后实现）
 - [ ] JDK 是 **17**（`./gradlew.bat -version` 确认），SDK 有 `platforms;android-37.0`，`local.properties` 已写
 - [ ] `cd android && git log --oneline -4` 能看到 4 个提交，且 `git status` 干净
 - [ ] `git remote -v` 里 `origin` 指向 `MingTu01`、`upstream` 指向 `iamr0s`
