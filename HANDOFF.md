@@ -89,7 +89,7 @@ git submodule update --init --depth 1 android   # .gitmodules 已指向 MingTu01
 ```bash
 cd android
 export JAVA_HOME="<JDK17 绝对路径>"          # 例：C:/Java/jdk-17
-./gradlew.bat :protocol-carplay:testDebugUnitTest :host-carlife-mixing:test --no-daemon --console=plain
+./gradlew.bat :protocol-carplay:testDebugUnitTest :app:compileXiaomiDebugKotlin --no-daemon --console=plain
 ./gradlew.bat :app:assembleXiaomiDebug --no-daemon --console=plain
 ```
 
@@ -102,21 +102,38 @@ $env:JAVA_HOME="C:\path\to\jdk-17"
 
 **自检**：`./gradlew.bat -version` 的 JVM 必须是 `17.x`；再跑一次上面的两个任务，都绿才算环境就绪。
 
-**正确的任务名**（上游已修正，别再用旧写法）：
+**任务名（来自上游 `AGENT.md` §6，已核对，别用旧写法）**：
 
-| 用途 | 任务 | 说明 |
+| 层级 | 命令 | 何时跑 |
 |---|---|---|
-| 协议/宿主单测 | `:protocol-carplay:testDebugUnitTest`、`:host-carlife-mixing:test` | 与品牌无关，最快 |
-| 全量单测 | `:app:testXiaomiDebugUnitTest` 等 | **每个 flavor 一个**，没有聚合任务 |
-| lint | `:app:lintXiaomiRelease` 等 | **没有聚合的 `lintRelease`**，写了会在任务选择阶段报 ambiguous、什么都没跑 |
-| 打包 | `:app:assembleXiaomiDebug` / `:app:assembleRelease` | 产物在 `app/build/outputs/apk/<brand>/<type>/` |
+| 最低检查 | `:protocol-carplay:testDebugUnitTest :app:compileXiaomiDebugKotlin` | 每次改完 |
+| 相关模块 | `:pcm-core:test :host-api:test :bridge:testDebugUnitTest :host-carlife-mixing:testDebugUnitTest :app:testXiaomiDebugUnitTest` | 改到对应模块时 |
+| 全量 + lint | `:app:test<Brand>DebugUnitTest` ×5 + `:app:lint<Brand>Release` ×5 + `:app:assembleRelease` | 发版前 |
+| 真机验证 | `:app:assembleXiaomiDebug` | 日常验证（**必须 debug，见下**） |
 
-**产物命名与版本号**：`CarVex_<brand>_<buildType>_<versionName>.apk`，
+- **没有聚合的 `lintRelease`**：`:app` 有 flavor 之后 AGP 只生成 `lint<Brand>Release`，写 `lintRelease` 会在**任务选择阶段**报 ambiguous，什么都没跑就失败。新增 flavor 时这份清单和 CI 的 matrix 都要同步加。
+- **没有聚合的单测任务**：每个 flavor 一个 `test<Brand>DebugUnitTest`。
+- `:host-carlife-mixing:test` 也能跑（聚合），但 `AGENT.md` 的写法是 `testDebugUnitTest`，以它为准。
+- **真机验证用 debug 包**：release 走 R8 混淆，栈不可读，排 SAP 握手时会瞎。
+
+**产物命名与版本号**：`app/build/outputs/apk/<brand>/<type>/CarVex_<brand>_<buildType>_<versionName>.apk`，
 `versionCode = 20000 + git rev-list --count HEAD`。
 android 仓库当前 **12 个提交** → `20012`。
 **浅克隆会让这个号变小**（`--depth 1` 时是 `20001`），看到版本号奇怪先查克隆深度，不要以为是构建坏了。
 
-Flavor 与包名：`xiaomi` / `oppo` / `vivo` / `samsung` / `honor`，小米包名 `com.baidu.carlife.xiaomi`。**APK 必须与手机上已装的同 Flavor 一致**，否则签名/覆盖会出问题。
+**Flavor、包名与宿主可用性**（来自 `AGENT.md` §5）：
+
+| Flavor | 包名 | 宿主（CarWith / CarLife） |
+|---|---|---|
+| `xiaomi` | `com.baidu.carlife.xiaomi` | 可用 —— 本项目真机验证用这个 |
+| `oppo` | `com.baidu.carlife.oppo` | 可用 |
+| `vivo` | `com.baidu.carlife.vivo` | 可用 |
+| `samsung` | `com.baidu.carlife.samsung` | 可用（多一个备用 Service） |
+| `honor` | `com.baidu.carlife.honor` | **仅打包，宿主插件不可用** |
+
+> 荣耀那一行有实际后果：宿主插件不可用 → `fromHost` 永远为 false → §4.4 的自唤醒也救不回来。
+> **只有小米 / OPPO / vivo / 三星手机能走 CarWith 宿主路径**；换手机测试前先确认这一点。
+> APK 必须与手机上已装的同 Flavor 一致，否则签名/覆盖冲突（签名材料全仓库共用一份，见上）。
 
 **CI（`.github/workflows/android.yml`）——结论：本项目不需要，保持关闭。**
 
@@ -453,7 +470,11 @@ Experimental HAP gate=pk_missing pi=absent pk=absent bonjour=fe80::…:7000 iap2
 ```bash
 cd android
 export JAVA_HOME="<JDK17 绝对路径>"
-./gradlew.bat :protocol-carplay:testDebugUnitTest :host-carlife-mixing:test --no-daemon --console=plain
+# 最低检查（AGENT.md §6）：协议单测 + 小米 flavor 能编译
+./gradlew.bat :protocol-carplay:testDebugUnitTest :app:compileXiaomiDebugKotlin --no-daemon --console=plain
+# 改到宿主/桥接时追加
+./gradlew.bat :host-carlife-mixing:testDebugUnitTest :bridge:testDebugUnitTest --no-daemon --console=plain
+# 出包（真机验证必须 debug）
 ./gradlew.bat :app:assembleXiaomiDebug --no-daemon --console=plain
 ```
 
@@ -526,7 +547,7 @@ export JAVA_HOME="<JDK17 绝对路径>"
 - [ ] `cd android && git log --oneline -4` 能看到 4 个提交，且 `git status` 干净
 - [ ] `git remote -v` 里 `origin` 指向 `MingTu01`、`upstream` 指向 `iamr0s`
 - [ ] 构建能出包（§1.2），产物 75 MB 左右，版本号 = 20000 + 提交数
-- [ ] 两个测试任务全绿
+- [ ] 最低检查全绿：`:protocol-carplay:testDebugUnitTest :app:compileXiaomiDebugKotlin`（§1.2）
 - [ ] 读过 §3（真机失败五步链）与 §5 的 U-1/U-2/U-3
 - [ ] 理解"真车必然走 SAP、音频必定哑"这两个结论
 - [ ] 拿到一份**真车**日志，且能看到 `Experimental HAP gate=` 那一行
