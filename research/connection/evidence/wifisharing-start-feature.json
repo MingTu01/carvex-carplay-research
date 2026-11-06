@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "created_date": "2026-11-06",
+  "baseline": "iPhone18,1 / iOS 27.0.1 / 24A446",
+  "status": "CLOSED-STATIC",
+  "chapter": "spec/91-wifisharing-start-feature-5702.md",
+  "runtime_observed": false,
+  "original_code_executed_this_round": false,
+  "source": {
+    "path": "firmware/extracted/24A446/components/24A446__iPhone18,1/root/System/Library/PrivateFrameworks/CoreAccessories.framework/Support/accessoryd",
+    "sha256": "2b0a2010e6d2605e07d87f05659c932e03de34476a76431196a9bb58da7dc4fe",
+    "size": 4330752,
+    "function_index": {
+      "path": "firmware/analysis/24A446/accessoryd-functions.json",
+      "sha256": "ec6e5970ba95ff2b956902e6275d98813f5cf9ec8435e10ed26f9f102977bcf2",
+      "entries": 11599
+    },
+    "cross_check": "this sha256 is identical to source_sha256 in evidence/iap2-pending-ack-recovery.json, so the bytes examined here are the same accessoryd the earlier 78-case probe used",
+    "segment_map": {
+      "__TEXT": {"vmaddr": "0x100000000", "fileoff": "0x0", "filesize": "0x218000"},
+      "note": "file offset == virtual address - 0x100000000, so no slide arithmetic is needed"
+    }
+  },
+  "sender": {
+    "address": "0x100170bb0",
+    "end": "0x100170c3c",
+    "name": "_iap2_wifisharing_RequestAccessoryWiFiConfigurationInformation",
+    "instructions": 35,
+    "gate_calls": 1,
+    "init_calls": 1,
+    "send_calls": 1,
+    "backward_branches_into_send_block": 0,
+    "forward_branches_to_epilogue": ["0x100170bc8", "0x100170be8", "0x100170c20"],
+    "call_sites_scan": {
+      "method": "decode every BL in __TEXT and compare the computed destination",
+      "sites": ["0x100170d58"],
+      "caveat": "indirect calls through vtables would not be visible to this scan; no vtable entry pointing at 0x100170bb0 was seen, but that was not exhaustively enumerated (WS-OPEN-06)"
+    },
+    "sequence": [
+      {"address": "0x100170bc8", "insn": "cbz x0, #0x100170c28", "meaning": "null session: return 0, nothing sent"},
+      {"address": "0x100170bd4", "insn": "add x1, x1, #0xc0", "meaning": "required-message group at 0x1001b40c0"},
+      {"address": "0x100170be0", "insn": "mov w2, #2", "meaning": "two entries"},
+      {"address": "0x100170be4", "insn": "bl #0x100050c2c", "meaning": "_iap2_identification_checkRequiredMsgIDs"},
+      {"address": "0x100170be8", "insn": "cbz w0, #0x100170c24", "meaning": "group unmet: return 0, nothing sent"},
+      {"address": "0x100170bf4", "insn": "mov w1, #0x5702", "meaning": "message id"},
+      {"address": "0x100170bf8", "insn": "mov w3, #0xffff", "meaning": "_iAP2MsgInit fourth argument; semantics OPEN"},
+      {"address": "0x100170c04", "insn": "bl #0x100003424", "meaning": "_iAP2MsgInit"},
+      {"address": "0x100170c10", "insn": "bl #0x100005130", "meaning": "_iap2_sessionControl_sendOutgoingMessage, the only send"},
+      {"address": "0x100170c1c", "insn": "bl #0x100004798", "meaning": "diagnostic 0x8ca8"}
+    ]
+  },
+  "caller": {
+    "address": "0x100170cb8",
+    "end": "0x100170d80",
+    "name": "_iap2_wifisharing__startFeatureFromDevice",
+    "feature_gate": {"address": "0x100170d48", "insn": "mov w1, #0x16", "feature": 22, "feature_name": "WiFiSharing"},
+    "start_call": {"address": "0x100170d58", "insn": "bl #0x100170bb0"},
+    "meaning": "0x5702 is the start action of feature 22, so a session emits it once and only a new feature start could emit it again"
+  },
+  "required_group": {
+    "address": "0x1001b40c0",
+    "entry_size": 12,
+    "count": 2,
+    "entries": [
+      {"message": "0x5702", "direction": 1, "flag": 1, "raw": "02570000 01000000 01000000"},
+      {"message": "0x5703", "direction": 0, "flag": 1, "raw": "03570000 00000000 01000000"}
+    ],
+    "direction_calibration": {
+      "comparison_group": "0x1001b40a8",
+      "comparison_entries": [
+        {"message": "0x5700", "direction": 0, "flag": 1},
+        {"message": "0x5701", "direction": 1, "flag": 1}
+      ],
+      "ground_truth": "_iap2_wifisharing_RequestWiFiInformation @0x10017020c compares the inbound message id against 0x5700 at 0x10017024c, so 5700 is received and 5701 is sent",
+      "derivation": "direction 1 = the phone sends it, 0 = the car sends it",
+      "grade": "INFERRED: consistent over two independent groups, not read from the consuming function"
+    },
+    "flag_semantics": "OPEN: the third field is 1 in all four entries of both groups; nothing here proves it means required/count"
+  },
+  "implementation_alignment": {
+    "target": "submodule iamr0s/carvex-android @ aa7b7500",
+    "send_count": {
+      "code": "protocol-carplay/.../Bootstrap.kt:445-446, one send(0x5702) guarded by routes.wifiAnnouncement",
+      "firmware": 1,
+      "verdict": "aligned"
+    },
+    "gate": {
+      "code": "protocol-carplay/.../IapIdentificationValidation.kt:29 wifiHandoff = [(0x5702,1), (0x5703,0)]; group() needs both directions declared before feature 22 is added to validatedMessageFeatures",
+      "firmware": "checkRequiredMsgIDs(session, 0x1001b40c0, 2, &flag)",
+      "verdict": "aligned; the local rule tuples are the firmware descriptor tuples"
+    },
+    "wait_budget": {
+      "code": "Bootstrap.kt:112 ANNOUNCEMENT_WAIT_MS = 30_000, break at :477, HANDOFF_FAILED at :498",
+      "firmware": "the sender carries no timeout; the upper-layer budget is unread (WS-OPEN-04)",
+      "verdict": "OPEN: a locally chosen constant, not a value read from the firmware. This record does not claim 30s is wrong, only that it has no counterpart yet"
+    },
+    "not_claimed": "none of the above explains why the car stays silent, and none of it explains the car reboot"
+  },
+  "branch_experiment_not_upstream": {
+    "what": "a work branch outside this repository added a 5s resend loop with a 25s budget, up to 6 frames of 0x5702",
+    "observed": "2026-11-06 22:12 six frames were sent and the same car then power-cycled; after the loop was withdrawn the same car released the session by itself at 78s",
+    "grade": "OBSERVED, single vehicle, single night, no control run; not generalisable",
+    "use": "supports the static conclusion that resending puts pressure on a stuck car; it is not evidence about the firmware"
+  },
+  "open_items": [
+    "WS-OPEN-01 car-side session occupancy and release: needs head-unit firmware or head-unit logs; a single observed release time is a runtime observation only",
+    "WS-OPEN-02 semantics of _iAP2MsgInit argument 0xffff and the two trailing zeros",
+    "WS-OPEN-03 semantics of the third descriptor field",
+    "WS-OPEN-04 the upper-layer budget that gives up on a silent 0x5702, including whether it produces a 1D03 refusal",
+    "WS-OPEN-05 whether IapLink retransmission is equivalent to _sendOutgoingMessage",
+    "WS-OPEN-06 whether an indirect call through a vtable can also reach 0x100170bb0"
+  ],
+  "reproduction": "python -B research/connection/tools/inspect_wifisharing_start_feature.py [--binary <extracted accessoryd>]"
+}
