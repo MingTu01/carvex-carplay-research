@@ -2,6 +2,8 @@
 
 日期：2026-10-30。本文是本目录的收口清单，不是苹果协议的补充规范，也不是“已经能投屏”的声明。每项必须有对应的原始证据、同一连接 attempt 的关联时间线，或车机端可观察结果后才能关闭。
 
+最新[91 — WiFiSharing 启动时的一次性 0x5702](91-wifisharing-start-feature-5702.md)把 5702 的发送侧闭合到原始指令：发送函数 `0x100170bb0` 无循环、无定时器，全 `__TEXT` 只有一个 `BL` 调用点 `0x100170d58`，位于 `_iap2_wifisharing__startFeatureFromDevice` 的 feature 22 启动分支内，且前置要求是车上声明过「收 5702、发 5703」这一组（描述符 `0x1001b40c0`）。据此 20069 的「只发一次」不是妥协而是回到固件合同；20068 及以前的「每 5 秒重发」没有固件对应物。车机为什么沉默、静默后上层何时放弃整段会话仍 `OPEN`（WS-OPEN-01/04），不得因发送侧闭合而视为已解。
+
 ## 1. 证据等级
 
 新增[86 — 初始握手错误ACK恢复](86-iap2-pending-ack-recovery.md)：手机已对已发SYNACK后的窗口外纯ACK添加RST/同传输等待新SYN，保留预算；78项局部原指令向量不是完整iPhone或实车验证。七次ACK-only/NO_SYN的来源与恢复仍OPEN，gap1接受及连接后容错未泛化，G3/G12不因此关闭。
@@ -46,7 +48,7 @@
 | G1 设备前提 | 首次配对/授权或已存在 bond 的状态被单独记录 | `OPEN` | [10](10-bluetooth-iap2-network.md) B-OPEN-01、[50](50-test-matrix.md) T01/T02 |
 | G2 RFCOMM | 目标服务、实际 socket/handle、方向和连接世代 | `PARTIAL` | B01；禁止用蓝牙图标替代 |
 | G4 识别与认证 | Identification、配件认证、能力声明和业务 gate 各自成功 | `PARTIAL` | [12](12-identification-contract.md) 静态合同、[65](65-identification-lifecycle-batch2.md)/[66](66-identification-core-batch3.md)手机有界实施；AA/全feature/运行证据仍独立待证，不得合并为一个authenticated位 |
-| G5 网络/启动输入 | 5702/5703 与 4300/4301 的实际字段、平台消费和分支选择 | `PARTIAL` | B-OPEN-05/B-OPEN-06 |
+| G5 网络/启动输入 | 5702/5703 与 4300/4301 的实际字段、平台消费和分支选择 | `PARTIAL` | B-OPEN-05/B-OPEN-06；发送侧已由[91](91-wifisharing-start-feature-5702.md)闭合为「feature 22 启动时一次」，字段与上层放弃预算仍 OPEN |
 | G6 网络就绪 | 关联、安全、有效地址、接口和路由均有记录 | `OPEN` | 10 §“平台交接”；不能把收到 5703 当作已联网 |
 | G7 端点/邀请 | `_carplay-ctrl._tcp`、发现、邀请或 4301 端点的实际入口和身份匹配 | `PARTIAL` | [20](20-airplay-session.md) A、[21](21-endpoint-fusion.md)、AP-U01/AP-U02；局部汇合不等于完整身份/端点链 |
 | G8 AirPlay 控制 | 当前控制 TCP、配对/验证、key holder、控制 SETUP 和事件路径 | `PARTIAL` | 20 B–D、[22](22-control-wire-contract.md)；封装/响应局部证据已补，安全路线和全量字段仍有 OPEN |
