@@ -4,6 +4,8 @@
 
 最新[91 — WiFiSharing 启动时的一次性 0x5702](91-wifisharing-start-feature-5702.md)把 5702 的发送侧闭合到原始指令：发送函数 `0x100170bb0` 无循环、无定时器，全 `__TEXT` 只有一个 `BL` 调用点 `0x100170d58`，位于 `_iap2_wifisharing__startFeatureFromDevice` 的 feature 22 启动分支内，且前置要求是车上声明过「收 5702、发 5703」这一组（描述符 `0x1001b40c0`，与手机侧 `IapIdentificationValidation.kt` 的 `wifiHandoff` 元组逐项相同）。据此「一个会话只发一次」是固件合同而非本地取值，重发没有固件对应物。车机为什么沉默、静默后上层何时放弃整段会话仍 `OPEN`（WS-OPEN-01/04），不得因发送侧闭合而视为已解；`ANNOUNCEMENT_WAIT_MS` 的 30 秒同样没有固件对应物，继续保持 `OPEN`（WS-OPEN-04）。
 
+配套的[92 — 车机持有旧会话时对 0x5702 沉默](92-car-holds-previous-session.md)补上运行侧的另一半：同一台车、同一晚、同一份声明的两轮里，5702 被接受时 5ms 进入 `stage WIFI`，被沉默时连链路层 ACK 都没有；前 3 次尝试全部无应答，第 4 次在约 66 秒后被接受，车机没有重启。该文是 `OBSERVED`，单车辆单晚，不能推出车机存在 66 秒超时，也不构成「加固定延迟」的依据；WS-OPEN-01 仍 `OPEN`。
+
 ## 1. 证据等级
 
 新增[86 — 初始握手错误ACK恢复](86-iap2-pending-ack-recovery.md)：手机已对已发SYNACK后的窗口外纯ACK添加RST/同传输等待新SYN，保留预算；78项局部原指令向量不是完整iPhone或实车验证。七次ACK-only/NO_SYN的来源与恢复仍OPEN，gap1接受及连接后容错未泛化，G3/G12不因此关闭。

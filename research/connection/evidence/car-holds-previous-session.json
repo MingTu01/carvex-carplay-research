@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "created_date": "2026-11-06",
+  "chapter": "spec/92-car-holds-previous-session.md",
+  "status": "OBSERVED",
+  "grade_note": "runtime observation on one vehicle and one night; not a firmware claim and not generalisable to other head units",
+  "claim_in_one_line": "when the head unit still holds a previous session it answers nothing at all, not even the iAP link ACK, and it releases the session by itself later",
+  "environment": {
+    "phone": "iPhone 18,1 identity profile, iOS 27.0.1 / 24A446 baseline used for the declaration checks",
+    "host": "Android head unit running CarWith",
+    "app": "CarVeX 20069, xiaomiDebug",
+    "transport": "Bluetooth RFCOMM, outbound from the phone",
+    "vehicle_count": 1,
+    "session_count": 4,
+    "raw_logs_committed": false,
+    "raw_log_reason": "logcat contains the device address and network identifiers, and the full capture is tens of MB"
+  },
+  "paired_sessions": {
+    "why_paired": "same night, same app build, same phone, same declaration; only the head unit state differed",
+    "session_a_accepted": {
+      "session": "9303b8c4",
+      "iAP_TX_5702": "14:32:38.708951",
+      "note": "the log line at the tail of IapLink.send(), emitted only after every tx slot is acknowledged",
+      "next_event": "14:32:38.713936 stage WIFI",
+      "delta_to_WIFI": "5ms",
+      "then": ["14:32:41.706061 stage PAIR", "14:32:43.056136 stage SETUP"]
+    },
+    "session_b_silent": {
+      "session": "4bacf53d",
+      "frame_tx": "14:32:48.267296 iAP frame TX 40/86/57/1/6 csm=5702",
+      "link_retransmit": "14:32:49.268097 same seq 86",
+      "no_iAP_TX_5702_line": true,
+      "failure": "14:32:50.279458 CarHoldsPreviousSessionException, not acknowledged for 3000ms",
+      "meaning": "the bytes went out and nothing came back at the link layer; this is not a rejected 5702, it is a silent link"
+    }
+  },
+  "declaration_is_identical": {
+    "session_b": "14:32:46.739681 accessorySends=[0x5000,0x5002,0x5003,0x5700,0x5703,0xAA06,0xEA02] receiverCanReceive=[0x4E09,0x4E0A,0x4E0B,0x4E0C,0x4E0D,0x4E0E,0x5001,0x5701,0x5702]",
+    "session_d": "14:33:49.866843 identical",
+    "implication": "the {5702 send, 5703 receive} gate from spec/91 3 is satisfied in both sessions, so the gate is not the variable",
+    "rules_out": "the tempting conclusion that the car never declared 0x5702"
+  },
+  "recovery_sequence": [
+    {"session": "4bacf53d", "started": "14:32:44.290", "outcome": "5702 unanswered, declared silent at 14:32:50.279"},
+    {"session": "8389a47b", "started": "14:32:50.588", "outcome": "14:32:57.809 EOFException Truncated 0/2"},
+    {"session": "d9f7d28e", "started": "14:33:01.144", "outcome": "stopped at stage BLUETOOTH, never reached DETECT"},
+    {"session": "5fe47be3", "started": "14:33:44.268", "outcome": "5702 at 14:33:50.469, iAP TX 5702 at 14:33:50.498983, stage WIFI 11ms later"}
+  ],
+  "elapsed_from_first_silence_to_acceptance": "about 66s (14:32:44.506 to 14:33:50.509)",
+  "head_unit_did_not_power_cycle": true,
+  "application_level_5702_frames_in_recovery": 1,
+  "contrast_not_upstream": {
+    "what": "a work branch outside this repository resent 0x5702 every 5s up to 6 frames inside a 25s budget",
+    "observed": "on the same car, that round ended with the head unit power-cycling",
+    "grade": "OBSERVED, single vehicle, single night, no control run",
+    "use": "supports 'fewer frames while the car is stuck'; it is not evidence about the firmware and not a law"
+  },
+  "implementation_gap": {
+    "code": "Bootstrap.kt:112 ANNOUNCEMENT_WAIT_MS = 30_000; Bootstrap.kt:334 require(handoffWaitMs in 1..30_000L); Bootstrap.kt:477 break; Bootstrap.kt:498 throw HANDOFF_FAILED",
+    "consequence": "no single attempt can wait longer than 30s, while this car took about 66s to release",
+    "what_it_does_not_mean": "it does not mean 30 should become 70; that would swap one constant with no firmware counterpart for another",
+    "what_it_does_mean": "recovery cannot come from a longer wait inside one attempt; it has to come from not asking again inside the hold window"
+  },
+  "local_mitigation_not_recommended_upstream": {
+    "what": "20070 persists the moment the car refused and withholds 0x5702 for 45s",
+    "why_not_recommended": "45s is a local value chosen from this observation, not a firmware value; it is a concrete stand-in for 'do not ask inside the window' until WS-OPEN-04 or head-unit evidence exists"
+  },
+  "not_claimed": [
+    "the head unit does not have a 66s or a 45s timeout - that is one observation, not a mechanism",
+    "other head units may behave differently (reject, 1D03, drop the link); none of that was observed",
+    "resending does not provably cause the power cycle - sample size 1, no control run",
+    "the release path itself stays WS-OPEN-01"
+  ],
+  "reproduction_filter": "adb logcat -v time | grep -E \"iAP frame TX|csm=5702|iAP TX 5702|stage (WIFI|PAIR|SETUP|DETECT|AUTH)|Identify accessorySends|failure\""
+}
