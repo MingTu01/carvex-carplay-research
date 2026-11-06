@@ -32,3 +32,7 @@
 **/*.gpr
 **/*.gbf
 **/*.prp
+# 提交消息草稿、临时截图、以及尚未归档进 docset runtime/ 的原始日志。
+/.commit-msg-*.txt
+/.tmp-shots/
+/research/logs/
