@@ -36,3 +36,6 @@
 /.commit-msg-*.txt
 /.tmp-shots/
 /research/logs/
+
+# Debug screenshots from the phone; they are evidence, not source.
+/shots/
